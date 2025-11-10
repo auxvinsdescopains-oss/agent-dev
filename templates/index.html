@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Agent IA Développeur</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Agent IA Développeur</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <label>Fichier :</label>
+        <input type="file" name="file" required><br><br>
+        <label>Tâche :</label>
+        <input type="text" name="task" placeholder="Ex: Refondre et optimiser le code" required><br><br>
+        <button type="submit">Envoyer</button>
+    </form>
+    {% if result %}
+    <h2>Résultat :</h2>
+    <pre>{{ result }}</pre>
+    {% endif %}
+</body>
+</html>

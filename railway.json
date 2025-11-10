@@ -1,0 +1,10 @@
+{
+  "name": "agent-ia-developpeur",
+  "services": [
+    {
+      "name": "web",
+      "type": "web",
+      "env": "python"
+    }
+  ]
+}
