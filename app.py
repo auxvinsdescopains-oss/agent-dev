@@ -11,6 +11,7 @@ os.makedirs(BACKUP_FOLDER, exist_ok=True)
 # --- Exemple de fonction de traitement ---
 def process_task(file_path, task):
     """
+    Refonte ultra design html css en conservant les couleurs de la page.
     Ici tu peux mettre ta logique de refonte HTML/design.
     Pour l'exemple, on lit le fichier, on ajoute un commentaire et on renvoie le contenu.
     """
