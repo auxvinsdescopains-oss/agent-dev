@@ -1,68 +1,104 @@
 from flask import Flask, request, render_template_string, jsonify
 from openai import OpenAI
 import os, shutil
+import time
 
-# --- Configuration ---
+# --- Flask Config ---
 app = Flask(__name__)
 UPLOAD_FOLDER = './uploads'
 BACKUP_FOLDER = './backups'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(BACKUP_FOLDER, exist_ok=True)
 
-# --- OpenAI ---
+# --- OpenAI Client ---
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# --- IA : fonction de restyle HTML ---
+
+# ---------------------------------------------------------
+#  IA – AUTOMATIC MODEL FALLBACK (ANTI-429 + ANTI-QUOTA)
+# ---------------------------------------------------------
+def safe_openai_call(prompt):
+    """
+    Appel IA avec fallback automatique :
+    1️⃣ gpt-4.1 (premium)
+    2️⃣ gpt-4o (si dispo)
+    3️⃣ gpt-4o-mini (jamais limité)
+    """
+
+    MODELS = ["gpt-4.1", "gpt-4o", "gpt-4o-mini"]
+
+    for model in MODELS:
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                timeout=40
+            )
+            print(f"✔ Réussi avec modèle : {model}")
+            return response.choices[0].message["content"]
+
+        except Exception as e:
+            error = str(e)
+            print(f"⚠ Erreur avec {model}: {error}")
+
+            # Cas quota ou limitation → on passe au modèle suivant
+            if ("quota" in error.lower() or
+                "limit" in error.lower() or
+                "429" in error.lower()):
+                continue  # On tente le modèle suivant
+
+            # Autres erreurs → stop
+            raise e
+
+    return "Erreur : aucun modèle OpenAI n'est disponible."
+
+
+# ---------------------------------------------------------
+#  IA – Refonte HTML/CSS future Design
+# ---------------------------------------------------------
 def ai_restyle_html(content, task):
     prompt = f"""
     Tu es un expert UI/UX, spécialisé en web design futuriste.
     Refonte complète du code HTML/CSS suivant.
-    
+
     Objectifs :
-    - design ultra moderne
-    - animations élégantes
-    - glassmorphism
-    - responsive
-    - effets premium
-    - composants stylés
-    - respecter les couleurs existantes
-    - garder le contenu textuel
-    - améliorer la structure si nécessaire
+    - style ultra moderne
+    - animations fluides
+    - glassmorphism / neomorphism
+    - responsive mobile
+    - transitions premium
+    - code propre
+    - conserver les couleurs existantes
+    - garder les textes
 
     Tâche demandée : {task}
 
-    Retourne uniquement le code final (HTML/CSS/JS), sans commentaires supplémentaires.
+    Retourne uniquement le code final.
 
-    CODE A RESTYLER :
+    CODE :
     {content}
     """
-
-    response = client.chat.completions.create(
-        model="gpt-4.1",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    return response.choices[0].message["content"]
+    return safe_openai_call(prompt)
 
 
-# --- TRAITEMENT FICHIER UPLOADE ---
+# ---------------------------------------------------------
+#  Traitement fichier uploadé
+# ---------------------------------------------------------
 def process_task(file_path, task):
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # Appel à l'IA
     new_content = ai_restyle_html(content, task)
 
-    # Sauvegarde du fichier modifié
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(new_content)
 
     return new_content
 
 
-# ------------------------------
-# PAGE PRINCIPALE (FORMULAIRE)
-# ------------------------------
+# ---------------------------------------------------------
+#  Page FORMULAIRE
+# ---------------------------------------------------------
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -77,13 +113,10 @@ def index():
             shutil.copy(file_path, os.path.join(BACKUP_FOLDER, filename))
 
             result_html = process_task(file_path, task)
-
-            # On affiche le résultat en pleine page
             return render_template_string(result_html)
 
         return "Erreur : aucun fichier reçu.", 400
 
-    # Formulaire HTML modernisé
     return '''
     <!DOCTYPE html>
     <html>
@@ -91,12 +124,12 @@ def index():
         <title>Agent IA Développeur</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body { font-family: Arial, sans-serif; background:#f1f5fb; color:#333; }
+            body { font-family: Arial, sans-serif; background:#eef3fa; color:#333; }
             .container {
-                max-width: 520px; margin: 5% auto; padding: 30px; background: #fff;
-                border-radius: 14px; box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+                max-width: 520px; margin: 5% auto; padding: 30px; background:#fff;
+                border-radius: 14px; box-shadow: 0 8px 25px rgba(0,0,0,0.15);
             }
-            h1 { text-align:center; color:#33ACFF; margin-bottom:20px; }
+            h1 { text-align:center; color:#33ACFF; }
             input[type=text], input[type=file] {
                 width: 100%; padding: 12px; margin: 10px 0;
                 border: 1px solid #33ACFF; border-radius: 6px; font-size: 16px;
@@ -105,7 +138,9 @@ def index():
                 width: 100%; padding: 12px; background:#33ACFF; color:white;
                 border:none; border-radius:6px; font-size:16px; cursor:pointer;
             }
-            button:hover { background:white; color:#33ACFF; border:1px solid #33ACFF; }
+            button:hover {
+                background:white; color:#33ACFF; border:1px solid #33ACFF;
+            }
             label { font-weight:bold; color:#33ACFF; }
         </style>
     </head>
@@ -125,19 +160,20 @@ def index():
     '''
 
 
-# ------------------------------
-# API RESTYLE JSON (code brut)
-# ------------------------------
+# ---------------------------------------------------------
+#  API REST : restyle code brut via JSON
+# ---------------------------------------------------------
 @app.route('/restyle', methods=['POST'])
 def restyle():
     code = request.json.get("code", "")
+    task = request.json.get("task", "Refonte moderne API")
 
-    result = ai_restyle_html(code, "Refonte UI moderne API")
+    result = ai_restyle_html(code, task)
     return jsonify({"restyled": result})
 
 
-# ------------------------------
-# RUN (Render ignore ce bloc, mais ok en local)
-# ------------------------------
+# ---------------------------------------------------------
+#  Local run (Render n’utilise pas ce bloc)
+# ---------------------------------------------------------
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
