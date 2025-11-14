@@ -90,4 +90,36 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+from openai import OpenAI
+from flask import request, jsonify
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+@app.route('/restyle', methods=['POST'])
+def restyle():
+    code = request.json.get("code")
+
+    prompt = f"""
+    Tu es un expert UI/UX, spécialisé en web design futuriste.
+    Réécris ce code HTML/CSS avec un style :
+    - ultra moderne
+    - animations
+    - glassmorphism
+    - responsive
+    - effets premium
+    - composants stylés
+    - code propre et optimisé
+
+    Retourne UNIQUEMENT le code final :
+
+    {code}
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    result = response.choices[0].message["content"]
+    return jsonify({"restyled": result})
 
